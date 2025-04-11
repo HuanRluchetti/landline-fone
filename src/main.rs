@@ -2,24 +2,32 @@ use::std::io;
 use::std::fs;
 use::std::io::Write;
 use::std::fs::OpenOptions;
+use crossterm::event::{self, Event, KeyCode};
+use std::time::Duration;
+use std::io::{BufRead};
+use std::thread;
 
 fn main() {
+
     let mut input_process = String::new();
 
+    println!("-------------------------------------------");
     println!("Insira o nome do processo:");
 
     io::stdin()
         .read_line(&mut input_process)
         .expect("Insira novamente!");
+    println!("-------------------------------------------");
 
     if !input_process.trim().is_empty() {
-        let mut loop_breaker = false;
-        let mut message = String::new();
         
         let whoami = input_process;
         let message_file_path = "message.txt"; 
         let proc_file_path = "process-list.txt";
         
+        let mut while_breaker = false;
+        let mut message = String::new();
+        let mut allocated_process = Vec::<String>::new();
         let mut proc_list_file = OpenOptions::new()
             .append(true)          
             .create(true)  
@@ -30,7 +38,30 @@ fn main() {
             .write_all(whoami.as_bytes())
             .expect("Erro ao escrever no file!");
 
-        while loop_breaker == false {
+
+            thread::spawn(move || {
+
+                while while_breaker != true {
+
+                    io::stdin()
+                    .read_line(&mut message)
+                    .expect("Insira novamente!");
+
+                    if !message.trim().is_empty(){
+                        let mut message_file = OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(message_file_path)
+                            .expect("Erro ao criar arquivo de menssagem");
+
+                        message_file.write_all(message.as_bytes()).expect("erro");
+                        
+                    }
+
+                }
+            });
+    
+        while while_breaker != true {
 
             let runtime_process_list = match fs::read_to_string(proc_file_path) {
                 Ok(content) => content,
@@ -38,13 +69,26 @@ fn main() {
             };
 
             if !runtime_process_list.trim().is_empty() {
-                println!("Process:");
-
+                
+                let mut i: u8 = 0;
+                
                 for line in runtime_process_list.lines() {
+                    
                     let line = line;
-                    println!("{}", line);
+
+                    if !allocated_process.contains(&line.to_string()) {
+                        if i == 0 {
+                            println!("-------------------------------------------");
+                            println!("Process List:");
+                        }
+
+                        allocated_process.push(line.to_string());
+                        println!("{}", line);    
+                    }
+
+                    i += 1;
                 }    
-            }
+            };
 
             let retrieve_message = match fs::read_to_string(message_file_path) {
                 Ok(content) => content,
@@ -55,38 +99,63 @@ fn main() {
                 for line in retrieve_message.lines() {
                     let line = line;
                     println!("{} -> {}", whoami, line);
+                };    
+
+                let self_message= retrieve_message
+                    .lines()
+                    .any(|line| line.trim() == whoami);
+
+                if !self_message {
+                    match fs::remove_file(message_file_path) {
+                        Ok(_) => continue,
+                        Err(e) => eprintln!("Erro ao deletar arquivo: {}", e),
+                    }   
                 }
-
-                match fs::remove_file(message_file_path) {
-                    Ok(_) => continue,
-                    Err(e) => eprintln!("Erro ao deletar arquivo: {}", e),
-                }    
-            }
-            
-            io::stdin()
-                .read_line(&mut message)
-                .expect("Insira novamente!");
-
-            if !message.trim().is_empty(){
-                let mut message_file = OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(message_file_path)
-                    .expect("Erro ao criar arquivo de menssagem");
-
-                message_file.write_all(message.as_bytes()).expect("erro");
-
             }
 
-            if message.trim() == "exit." {
-                loop_breaker = true;
+            if event::poll(Duration::from_millis(100)).unwrap() {
+                if let Event::Key(key_event) = event::read().unwrap() {
+                    match key_event.code {
+                        KeyCode::Esc => while_breaker = true,
+                        _ => {}
+                    }
+
+                    if while_breaker == true {
+                        
+                        let filtered_lines: Vec<String> = runtime_process_list
+                            .lines()
+                            .filter(|line| line.trim() != whoami)
+                            .map(|s|s.to_string())
+                            .collect(); 
+
+                        for line  in filtered_lines {
+                            writeln!(proc_list_file, "{}", line).expect("Erro ao remover");
+                        } 
+                    }
+                }
             }
 
-        }   
+            std::thread::sleep(std::time::Duration::from_secs(2));
 
+            // if event::poll(Duration::from_millis(100)).unwrap() {
+                
+            //     io::stdin()
+            //     .read_line(&mut message)
+            //     .expect("Insira novamente!");
+
+            //     if !message.trim().is_empty(){
+            //         let mut message_file = OpenOptions::new()
+            //             .create(true)
+            //             .append(true)
+            //             .open(message_file_path)
+            //             .expect("Erro ao criar arquivo de menssagem");
+
+            //         message_file.write_all(message.as_bytes()).expect("erro");
+                    
+            //     }
+            // }
         
-
-
+        }   
 
     }
 }
