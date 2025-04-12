@@ -2,9 +2,6 @@ use::std::io;
 use::std::fs;
 use::std::io::Write;
 use::std::fs::OpenOptions;
-use crossterm::event::{self, Event, KeyCode};
-use std::time::Duration;
-use std::io::{BufRead};
 use std::thread;
 
 fn main() {
@@ -24,7 +21,9 @@ fn main() {
         let whoami = input_process;
         let message_file_path = "message.txt"; 
         let proc_file_path = "process-list.txt";
-        
+        let whoami_out = whoami.clone();
+        let whoami_message = whoami.clone();
+
         let mut while_breaker = false;
         let mut message = String::new();
         let mut allocated_process = Vec::<String>::new();
@@ -35,7 +34,7 @@ fn main() {
             .expect("Erro ao abrir o arquivo");
     
         proc_list_file
-            .write_all(whoami.as_bytes())
+            .write_all(&whoami.as_bytes())
             .expect("Erro ao escrever no file!");
 
 
@@ -55,6 +54,26 @@ fn main() {
                             .expect("Erro ao criar arquivo de menssagem");
 
                         message_file.write_all(message.as_bytes()).expect("erro");
+                    }
+
+                    if message.trim() == "exit" {
+
+                        let runtime_process_list = match fs::read_to_string(proc_file_path) {
+                            Ok(content) => content,
+                            Err(_) => String::new(),
+                        };
+
+                        let filtered_lines: Vec<String> = runtime_process_list
+                            .lines()
+                            .filter(|line| line.trim() != &whoami_out)
+                            .map(|s|s.to_string())
+                            .collect(); 
+
+                        for line  in filtered_lines {
+                            writeln!(proc_list_file, "{}", line).expect("Erro ao remover");
+                        }
+
+                        while_breaker = true; 
                         
                     }
 
@@ -98,12 +117,12 @@ fn main() {
             if !retrieve_message.trim().is_empty() {
                 for line in retrieve_message.lines() {
                     let line = line;
-                    println!("{} -> {}", whoami, line);
+                    println!("{} -> {}", &whoami.trim(), line);
                 };    
 
                 let self_message= retrieve_message
                     .lines()
-                    .any(|line| line.trim() == whoami);
+                    .any(|line| line.trim() == &whoami_message);
 
                 if !self_message {
                     match fs::remove_file(message_file_path) {
@@ -113,47 +132,7 @@ fn main() {
                 }
             }
 
-            if event::poll(Duration::from_millis(100)).unwrap() {
-                if let Event::Key(key_event) = event::read().unwrap() {
-                    match key_event.code {
-                        KeyCode::Esc => while_breaker = true,
-                        _ => {}
-                    }
-
-                    if while_breaker == true {
-                        
-                        let filtered_lines: Vec<String> = runtime_process_list
-                            .lines()
-                            .filter(|line| line.trim() != whoami)
-                            .map(|s|s.to_string())
-                            .collect(); 
-
-                        for line  in filtered_lines {
-                            writeln!(proc_list_file, "{}", line).expect("Erro ao remover");
-                        } 
-                    }
-                }
-            }
-
             std::thread::sleep(std::time::Duration::from_secs(2));
-
-            // if event::poll(Duration::from_millis(100)).unwrap() {
-                
-            //     io::stdin()
-            //     .read_line(&mut message)
-            //     .expect("Insira novamente!");
-
-            //     if !message.trim().is_empty(){
-            //         let mut message_file = OpenOptions::new()
-            //             .create(true)
-            //             .append(true)
-            //             .open(message_file_path)
-            //             .expect("Erro ao criar arquivo de menssagem");
-
-            //         message_file.write_all(message.as_bytes()).expect("erro");
-                    
-            //     }
-            // }
         
         }   
 
